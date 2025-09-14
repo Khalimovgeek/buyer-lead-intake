@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
-
+import { ZodError } from "zod";
+import { buyerSchema } from "@/lib/validators/buyer";
+import { rateLimit } from "@/lib/rateLimit";
 const prisma = new PrismaClient()
 
 export async function GET(req: NextRequest) {
@@ -62,5 +64,60 @@ export async function GET(req: NextRequest) {
     })
   } catch (error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("host") || "anon";
+    const rl = rateLimit(ip, 20, 60 * 1000); // 20 requests/min per IP
+    if (!rl.ok) {
+      return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
+    }
+
+    const json = await req.json();
+
+    const parsed = buyerSchema.parse(json);
+
+    const ownerId = json.ownerId ?? "demo-user"; // replace with auth session user id
+
+    const buyer = await prisma.buyer.create({
+      data: {
+        fullName: parsed.fullName,
+        email: parsed.email || null,
+        phone: parsed.phone,
+        city: parsed.city,
+        propertyType: parsed.propertyType,
+        bhk: parsed.bhk ?? null,
+        purpose: parsed.purpose,
+        budgetMin: parsed.budgetMin ?? null,
+        budgetMax: parsed.budgetMax ?? null,
+        timeline: parsed.timeline,
+        source: parsed.source,
+        notes: parsed.notes ?? null,
+        tags: parsed.tags ?? [],
+        status: parsed.status ?? "New",
+        ownerId,
+      },
+    });
+
+    await prisma.buyerHistory.create({
+      data: {
+        buyerId: buyer.id,
+        changedBy: ownerId,
+        changedAt: new Date(),
+        diff: { created: true },
+      },
+    });
+
+    return NextResponse.json(buyer, { status: 201 });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      // prefer flatten for frontend-friendly structure
+      const flat = error.flatten();
+      return NextResponse.json({ errors: flat }, { status: 400 });
+    }
+    console.error(error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
