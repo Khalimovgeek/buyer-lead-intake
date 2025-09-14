@@ -1,6 +1,5 @@
 'use client'
-
-import { useEffect, useState } from 'react'
+import React, { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Buyer {
@@ -22,10 +21,12 @@ interface Buyer {
 }
 
 interface Props {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export default function EditBuyerPage({ params }: Props) {
+export default function EditBuyerPage(props: Props) {
+  const params = use(props.params) // unwrap promise
+  const id = params.id
   const router = useRouter()
   const [buyer, setBuyer] = useState<Buyer | null>(null)
   const [loading, setLoading] = useState(true)
@@ -37,13 +38,21 @@ export default function EditBuyerPage({ params }: Props) {
     async function fetchBuyer() {
       setLoading(true)
       try {
-        const res = await fetch(`/api/buyers/${params.id}`)
-        if (!res.ok) {
-          const data = await res.json()
-          throw new Error(data.error || 'Failed to load buyer')
+        const res = await fetch(`/api/buyers/${id}`)
+
+        const text = await res.text()
+        let data = null
+        try {
+          data = text ? JSON.parse(text) : null
+        } catch {
+          // invalid JSON
         }
-        const data: Buyer = await res.json()
-        setBuyer(data)
+
+        if (!res.ok) {
+          throw new Error(data?.error || 'Failed to load buyer')
+        }
+
+        setBuyer(data as Buyer)
       } catch (err: any) {
         setError(err.message)
       } finally {
@@ -51,16 +60,30 @@ export default function EditBuyerPage({ params }: Props) {
       }
     }
     fetchBuyer()
-  }, [params.id])
+  }, [id])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    let value: any = e.target.value
+    if (e.target.type === 'number') {
+      value = value === '' ? undefined : Number(value)
+    }
+    const { name } = e.target
     setBuyer((b) => (b ? { ...b, [name]: value } : null))
   }
 
   const handleTagsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setBuyer((b) =>
-      b ? { ...b, tags: e.target.value.split(',').map((t) => t.trim()) } : null
+      b
+        ? {
+            ...b,
+            tags: e.target.value
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean),
+          }
+        : null
     )
   }
 
@@ -74,14 +97,21 @@ export default function EditBuyerPage({ params }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...buyer,
-          budgetMin: buyer.budgetMin ? Number(buyer.budgetMin) : undefined,
-          budgetMax: buyer.budgetMax ? Number(buyer.budgetMax) : undefined,
+          budgetMin: buyer.budgetMin ?? undefined,
+          budgetMax: buyer.budgetMax ?? undefined,
         }),
       })
+
+      const text = await res.text()
+      let data = null
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch {}
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to save')
+        throw new Error(data?.error || 'Failed to save')
       }
+
       router.push('/buyers')
     } catch (err: any) {
       setError(err.message)
@@ -99,10 +129,17 @@ export default function EditBuyerPage({ params }: Props) {
       const res = await fetch(`/api/buyers/${buyer.id}`, {
         method: 'DELETE',
       })
+
+      const text = await res.text()
+      let data = null
+      try {
+        data = text ? JSON.parse(text) : null
+      } catch {}
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to delete')
+        throw new Error(data?.error || 'Failed to delete')
       }
+
       router.push('/buyers')
     } catch (err: any) {
       setError(err.message)
@@ -127,9 +164,10 @@ export default function EditBuyerPage({ params }: Props) {
         }}
         style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
       >
-        <label>
+        <label htmlFor="fullName">
           Full Name:
           <input
+            id="fullName"
             name="fullName"
             value={buyer.fullName}
             onChange={handleChange}
@@ -139,14 +177,21 @@ export default function EditBuyerPage({ params }: Props) {
           />
         </label>
 
-        <label>
+        <label htmlFor="email">
           Email:
-          <input name="email" type="email" value={buyer.email ?? ''} onChange={handleChange} />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            value={buyer.email ?? ''}
+            onChange={handleChange}
+          />
         </label>
 
-        <label>
+        <label htmlFor="phone">
           Phone:
           <input
+            id="phone"
             name="phone"
             type="tel"
             value={buyer.phone}
@@ -156,9 +201,9 @@ export default function EditBuyerPage({ params }: Props) {
           />
         </label>
 
-        <label>
+        <label htmlFor="city">
           City:
-          <select name="city" value={buyer.city} onChange={handleChange}>
+          <select id="city" name="city" value={buyer.city} onChange={handleChange}>
             <option>Chandigarh</option>
             <option>Mohali</option>
             <option>Zirakpur</option>
@@ -167,9 +212,14 @@ export default function EditBuyerPage({ params }: Props) {
           </select>
         </label>
 
-        <label>
+        <label htmlFor="propertyType">
           Property Type:
-          <select name="propertyType" value={buyer.propertyType} onChange={handleChange}>
+          <select
+            id="propertyType"
+            name="propertyType"
+            value={buyer.propertyType}
+            onChange={handleChange}
+          >
             <option>Apartment</option>
             <option>Villa</option>
             <option>Plot</option>
@@ -178,9 +228,10 @@ export default function EditBuyerPage({ params }: Props) {
           </select>
         </label>
 
-        <label>
+        <label htmlFor="bhk">
           BHK (for Apartment, Villa):
           <select
+            id="bhk"
             name="bhk"
             value={buyer.bhk ?? ''}
             onChange={handleChange}
@@ -196,17 +247,18 @@ export default function EditBuyerPage({ params }: Props) {
           </select>
         </label>
 
-        <label>
+        <label htmlFor="purpose">
           Purpose:
-          <select name="purpose" value={buyer.purpose} onChange={handleChange}>
+          <select id="purpose" name="purpose" value={buyer.purpose} onChange={handleChange}>
             <option>Buy</option>
             <option>Rent</option>
           </select>
         </label>
 
-        <label>
+        <label htmlFor="budgetMin">
           Budget Min:
           <input
+            id="budgetMin"
             name="budgetMin"
             type="number"
             value={buyer.budgetMin ?? ''}
@@ -215,9 +267,10 @@ export default function EditBuyerPage({ params }: Props) {
           />
         </label>
 
-        <label>
+        <label htmlFor="budgetMax">
           Budget Max:
           <input
+            id="budgetMax"
             name="budgetMax"
             type="number"
             value={buyer.budgetMax ?? ''}
@@ -226,9 +279,9 @@ export default function EditBuyerPage({ params }: Props) {
           />
         </label>
 
-        <label>
+        <label htmlFor="timeline">
           Timeline:
-          <select name="timeline" value={buyer.timeline} onChange={handleChange}>
+          <select id="timeline" name="timeline" value={buyer.timeline} onChange={handleChange}>
             <option value="ThreeMonths">0-3 Months</option>
             <option value="SixMonths">3-6 Months</option>
             <option value="MoreThanSixMonths">&gt;6 Months</option>
@@ -236,9 +289,9 @@ export default function EditBuyerPage({ params }: Props) {
           </select>
         </label>
 
-        <label>
+        <label htmlFor="source">
           Source:
-          <select name="source" value={buyer.source} onChange={handleChange}>
+          <select id="source" name="source" value={buyer.source} onChange={handleChange}>
             <option>Website</option>
             <option>Referral</option>
             <option>WalkIn</option>
@@ -247,9 +300,10 @@ export default function EditBuyerPage({ params }: Props) {
           </select>
         </label>
 
-        <label>
+        <label htmlFor="notes">
           Notes:
           <textarea
+            id="notes"
             name="notes"
             value={buyer.notes ?? ''}
             onChange={handleChange}
@@ -258,9 +312,10 @@ export default function EditBuyerPage({ params }: Props) {
           />
         </label>
 
-        <label>
+        <label htmlFor="tags">
           Tags (comma separated):
           <input
+            id="tags"
             type="text"
             value={buyer.tags?.join(', ') ?? ''}
             onChange={handleTagsChange}
@@ -271,7 +326,12 @@ export default function EditBuyerPage({ params }: Props) {
           <button type="submit" disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save Changes'}
           </button>
-          <button type="button" onClick={handleDelete} disabled={isDeleting} style={{ backgroundColor: '#e55353', color: 'white' }}>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            style={{ backgroundColor: '#e55353', color: 'white' }}
+          >
             {isDeleting ? 'Deleting...' : 'Delete Lead'}
           </button>
         </div>

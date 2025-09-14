@@ -108,3 +108,18 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const buyer = await prisma.buyer.findUnique({
+      where: { id: params.id }
+    })
+
+    if (!buyer) {
+      return NextResponse.json({ error: 'Buyer not found' }, { status: 404 })
+    }
+
+    return NextResponse.json(buyer)
+  } catch (error) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
