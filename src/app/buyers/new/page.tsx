@@ -41,7 +41,7 @@ export default function NewBuyerPage() {
     }
 
     try {
-      const res = await fetch('/api/buyers', {
+      const res = await fetch('/api/buyers/new', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
